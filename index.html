@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="UBT Stage 1 PoC - Candidate Retrieval với query understanding, lexical search, dense retrieval và RRF fusion."
+    />
+    <meta name="theme-color" content="#071019" />
+    <title>UBT Stage 1 Candidate Retrieval</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="UBT Stage 1 home">
+        <span class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+        <span>
+          <strong>UBT</strong>
+          <small>Stage 1 Lab</small>
+        </span>
+      </a>
+      <nav aria-label="Điều hướng chính">
+        <a href="#demo">Search demo</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#architecture">Architecture</a>
+      </nav>
+      <span class="environment"><i></i> PoC mock data</span>
+    </header>
+
+    <main id="top">
+      <section class="hero shell">
+        <div class="hero-copy">
+          <p class="eyebrow">Candidate retrieval before business ranking</p>
+          <h1>Hiểu đúng query.<br />Tìm đúng người.</h1>
+          <p class="hero-lead">
+            Stage 1 biến một câu tìm kiếm ngắn thành tối đa 1.000 candidate ID. Bản demo này mô phỏng query
+            understanding, security filter, BM25, dense retrieval và RRF fusion ngay trong trình duyệt.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#demo">Chạy thử pipeline</a>
+            <a class="button secondary" href="#architecture">Xem kiến trúc</a>
+          </div>
+        </div>
+
+        <div class="hero-console" aria-label="Stage 1 architecture summary">
+          <div class="console-head">
+            <span><i></i><i></i><i></i></span>
+            <code>stage1.request</code>
+          </div>
+          <pre><span class="muted">// input</span>
+{
+  <span class="key">"query"</span>: <span class="string">"VP Semi JP"</span>,
+  <span class="key">"tenant"</span>: <span class="string">"T01"</span>,
+  <span class="key">"top_k"</span>: <span class="number">1000</span>
+}
+
+<span class="muted">// query understanding</span>
+VP   <span class="arrow">-&gt;</span> VICE_PRESIDENT
+Semi <span class="arrow">-&gt;</span> SEMICONDUCTOR
+JP   <span class="arrow">-&gt;</span> country:JP
+
+<span class="success">strategy: HYBRID</span></pre>
+        </div>
+      </section>
+
+      <section class="metric-strip shell" aria-label="Stage 1 design targets">
+        <div><strong>10K</strong><span>mock profiles</span></div>
+        <div><strong>1K</strong><span>max candidates</span></div>
+        <div><strong>2</strong><span>retrieval branches</span></div>
+        <div><strong>0</strong><span>cross-tenant tolerance</span></div>
+      </section>
+
+      <section class="demo-section shell" id="demo">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Interactive proof of concept</p>
+            <h2>Search Gateway simulator</h2>
+          </div>
+          <p>
+            Dữ liệu, score và latency bên dưới là mô phỏng xác định để kiểm tra user flow. Production sẽ thay
+            các retriever bằng Elasticsearch và BGE-M3 thật.
+          </p>
+        </div>
+
+        <div class="search-workbench">
+          <div class="query-panel">
+            <form id="search-form">
+              <label for="search-input">Bạn đang cần tìm ai</label>
+              <div class="search-field">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" />
+                </svg>
+                <input
+                  id="search-input"
+                  name="query"
+                  value="VP Semi JP"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-describedby="query-help"
+                />
+                <button type="submit">Search <span>↵</span></button>
+              </div>
+              <p id="query-help" class="input-help">Thử tên người, chức danh, kỹ năng, dự án hoặc location.</p>
+            </form>
+
+            <div class="example-row" aria-label="Ví dụ truy vấn">
+              <span>Examples</span>
+              <button data-query="VP Semi JP">VP Semi JP</button>
+              <button data-query="Kenji Sato">Kenji Sato</button>
+              <button data-query="PM AI Japan">PM AI Japan</button>
+              <button data-query="người từng dẫn dự án AI cho automotive">AI automotive lead</button>
+            </div>
+
+            <div class="query-inspector">
+              <div class="inspector-card wide">
+                <span class="label">Canonical query</span>
+                <strong id="canonical-query">vice president semiconductor japan</strong>
+              </div>
+              <div class="inspector-card">
+                <span class="label">Route</span>
+                <strong id="query-route" class="route-badge">STRUCTURED</strong>
+              </div>
+              <div class="inspector-card">
+                <span class="label">Strategy</span>
+                <strong id="query-strategy">HYBRID</strong>
+              </div>
+            </div>
+
+            <div class="resolution-row" id="resolution-row" aria-live="polite"></div>
+          </div>
+
+          <aside class="request-context">
+            <div class="aside-heading">
+              <span>Request context</span>
+              <i>locked</i>
+            </div>
+            <dl>
+              <div><dt>tenant_id</dt><dd>T01</dd></div>
+              <div><dt>requester_id</dt><dd>P000010</dd></div>
+              <div><dt>allowed_acl</dt><dd>EMPLOYEE, APAC</dd></div>
+              <div><dt>entity_type</dt><dd>HUMAN</dd></div>
+              <div><dt>top_k</dt><dd>1,000</dd></div>
+            </dl>
+            <p>Security filters luôn được áp dụng trước retrieval và không bị tắt trong degraded mode.</p>
+          </aside>
+        </div>
+
+        <div class="results-layout">
+          <section class="results-panel" aria-labelledby="results-title">
+            <div class="panel-heading">
+              <div>
+                <span class="kicker">Fused candidates</span>
+                <h3 id="results-title">Top results</h3>
+              </div>
+              <span id="result-count" class="result-count">8 of 10 eligible</span>
+            </div>
+            <div id="results-list" class="results-list" aria-live="polite"></div>
+          </section>
+
+          <aside class="telemetry-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="kicker">Simulated telemetry</span>
+                <h3>Request trace</h3>
+              </div>
+              <span class="trace-id" id="trace-id">q-1f3a</span>
+            </div>
+            <div class="latency-total">
+              <span>Stage 1 total</span>
+              <strong><b id="total-latency">14.8</b> ms</strong>
+            </div>
+            <div id="trace-list" class="trace-list"></div>
+            <div class="filter-summary">
+              <span>Hard filter</span>
+              <strong id="filter-count">3 removed</strong>
+              <small>wrong tenant · inactive · self</small>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="pipeline-section" id="pipeline">
+        <div class="shell">
+          <div class="section-heading inverse">
+            <div>
+              <p class="eyebrow">One request from text to IDs</p>
+              <h2>Pipeline online thống nhất</h2>
+            </div>
+            <p>Mỗi bước có một trách nhiệm, metric và fallback rõ ràng. Stage 1 không thực hiện business ranking.</p>
+          </div>
+
+          <ol class="pipeline-grid">
+            <li><span>01</span><div><strong>Validate</strong><p>Schema, Unicode, deadline và top_k.</p></div></li>
+            <li><span>02</span><div><strong>Resolve</strong><p>Abbreviation, title, skill và location.</p></div></li>
+            <li><span>03</span><div><strong>Route</strong><p>NAME, STRUCTURED hoặc SEMANTIC.</p></div></li>
+            <li><span>04</span><div><strong>Hard filter</strong><p>Tenant, ACL, HUMAN, active và self.</p></div></li>
+            <li><span>05A</span><div><strong>Lexical</strong><p>Exact, prefix và fielded BM25.</p></div></li>
+            <li><span>05B</span><div><strong>Dense</strong><p>BGE-M3 embedding và HNSW.</p></div></li>
+            <li><span>06</span><div><strong>RRF fusion</strong><p>Hợp nhất rank và loại duplicate.</p></div></li>
+            <li><span>07</span><div><strong>Compact output</strong><p>ID, score, version và telemetry.</p></div></li>
+          </ol>
+
+          <div class="fallback-note">
+            <span>Fallback rule</span>
+            <p>Nếu dense branch timeout, trả lexical candidates với <code>partial_result=true</code>. Không sinh candidate giả.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="architecture-section shell" id="architecture">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">PoC now production later</p>
+            <h2>Ranh giới kiến trúc</h2>
+          </div>
+          <p>UI này giữ nguyên data contract để backend thật có thể thay thế mock engine mà không đổi user flow.</p>
+        </div>
+
+        <div class="architecture-grid">
+          <article>
+            <span class="architecture-tag current">Browser PoC</span>
+            <h3>Mock retrieval engine</h3>
+            <p>Dataset nhỏ nằm trong JavaScript, deterministic scoring và RRF thật để demo hành vi.</p>
+            <ul>
+              <li>Không cần backend hoặc secret</li>
+              <li>Deploy static trên Vercel</li>
+              <li>Phù hợp demo và contract review</li>
+            </ul>
+          </article>
+          <div class="architecture-arrow" aria-hidden="true">→</div>
+          <article>
+            <span class="architecture-tag next">Production adapter</span>
+            <h3>Search Gateway API</h3>
+            <p>Giữ cùng request và response, thay mock bằng Elasticsearch, BGE-M3 và Feature Store.</p>
+            <ul>
+              <li>Server-side tenant và ACL validation</li>
+              <li>Real embedding revision</li>
+              <li>Measured latency và observability</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="contract-row">
+          <div>
+            <span>Input</span>
+            <code>query · tenant_id · requester_id · ACL · top_k</code>
+          </div>
+          <div>
+            <span>Output</span>
+            <code>strategy · versions · CandidateRef[] · telemetry</code>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="shell">
+        <div class="brand footer-brand">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span><strong>UBT</strong><small>Stage 1 Candidate Retrieval</small></span>
+        </div>
+        <p>Static PoC · Mock data only · No customer data</p>
+      </div>
+    </footer>
+
+    <noscript>Ứng dụng cần JavaScript để chạy mô phỏng tìm kiếm.</noscript>
+    <script src="./app.js" defer></script>
+  </body>
+</html>
